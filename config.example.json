@@ -1,6 +1,5 @@
 {
-  "client_id": "치지직 개발자 센터의 Client ID",
-  "client_secret": "치지직 개발자 센터의 Client Secret",
+  "auth_server": "https://chzzk-songbot-auth.chzzk-songbot-auth.workers.dev",
   "port": 8080,
   "max_duration_sec": 600,
   "per_user_limit": 2,

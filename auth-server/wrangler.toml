@@ -1,0 +1,7 @@
+name = "chzzk-songbot-auth"
+main = "src/index.js"
+compatibility_date = "2025-09-01"
+
+# CHZZK_CLIENT_ID / CHZZK_CLIENT_SECRET 은 아래 명령으로 등록 (파일에 적지 마세요)
+#   npx wrangler secret put CHZZK_CLIENT_ID
+#   npx wrangler secret put CHZZK_CLIENT_SECRET

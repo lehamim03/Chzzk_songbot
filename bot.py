@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import socketio
 
+from chzzk import ChzzkAuthError
 from songs import Song, SongError, check_embeddable, resolve
 
 log = logging.getLogger("bot")
@@ -28,6 +29,7 @@ class SongBot:
         self.queue = queue
         self.max_duration = int(config.get("max_duration_sec", 600))
         self.chat_replies = bool(config.get("chat_replies", True))
+        self.port = int(config.get("port", 8080))
         self._pool = ThreadPoolExecutor(max_workers=4)
         self._thread = None
 
@@ -48,6 +50,9 @@ class SongBot:
                 sio.on("disconnect", lambda: log.warning("채팅 세션 연결이 끊겼습니다."))
                 sio.connect(url, transports=["websocket"])
                 sio.wait()
+            except ChzzkAuthError as e:
+                log.error("%s 브라우저에서 http://localhost:%d/login 을 열어 다시 로그인해 주세요.", e, self.port)
+                return
             except Exception:
                 log.exception("채팅 세션 오류")
             log.info("5초 후 다시 연결합니다...")
@@ -71,7 +76,7 @@ class SongBot:
                 log.info("채팅 구독 완료! 이제 !신청곡 을 받을 수 있어요.")
             except Exception:
                 log.exception("채팅 구독 실패")
-        else:
+        elif data.get("type") != "subscribed":
             log.info("SYSTEM: %s", data)
 
     def _on_chat(self, data):

@@ -2,3 +2,6 @@
 __pycache__/
 config.json
 tokens.json
+auth-server/.dev.vars
+auth-server/.wrangler/
+auth-server/node_modules/

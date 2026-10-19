@@ -1,4 +1,7 @@
-"""치지직 Open API 클라이언트 (인증 / 세션 / 채팅)."""
+"""치지직 Open API 클라이언트 (인증 / 세션 / 채팅).
+
+Client Secret 은 인증 서버(auth-server/)에만 있고, 여기서는 토큰만 다룹니다.
+"""
 import json
 import os
 import threading
@@ -8,17 +11,15 @@ import urllib.parse
 import requests
 
 API_BASE = "https://openapi.chzzk.naver.com"
-AUTH_PAGE = "https://chzzk.naver.com/account-interlock"
 
 
 class ChzzkAuthError(Exception):
-    pass
+    """다시 로그인해야 하는 상황."""
 
 
 class ChzzkApi:
-    def __init__(self, client_id, client_secret, token_path="tokens.json"):
-        self.client_id = client_id
-        self.client_secret = client_secret
+    def __init__(self, auth_server, token_path="tokens.json"):
+        self.auth_server = auth_server.rstrip("/")
         self.token_path = token_path
         self._lock = threading.Lock()
         self.tokens = self._load_tokens()
@@ -30,64 +31,55 @@ class ChzzkApi:
         with open(self.token_path, encoding="utf-8") as f:
             return json.load(f)
 
-    def _save_tokens(self, content):
+    def set_tokens(self, access_token, refresh_token, expires_in):
         self.tokens = {
-            "accessToken": content["accessToken"],
-            "refreshToken": content["refreshToken"],
-            "expiresAt": time.time() + int(content.get("expiresIn", 86400)) - 60,
+            "accessToken": access_token,
+            "refreshToken": refresh_token,
+            "expiresAt": time.time() + int(expires_in or 86400) - 60,
         }
         with open(self.token_path, "w", encoding="utf-8") as f:
             json.dump(self.tokens, f, ensure_ascii=False, indent=2)
+
+    def logout(self):
+        self.tokens = None
+        if os.path.exists(self.token_path):
+            os.remove(self.token_path)
 
     @property
     def logged_in(self):
         return self.tokens is not None
 
-    # ---------- 인증 ----------
-    def auth_url(self, redirect_uri, state):
-        query = urllib.parse.urlencode(
-            {"clientId": self.client_id, "redirectUri": redirect_uri, "state": state}
-        )
-        return f"{AUTH_PAGE}?{query}"
-
-    def exchange_code(self, code, state):
-        content = self._token_request(
-            {
-                "grantType": "authorization_code",
-                "clientId": self.client_id,
-                "clientSecret": self.client_secret,
-                "code": code,
-                "state": state,
-            }
-        )
-        with self._lock:
-            self._save_tokens(content)
+    # ---------- 인증 (인증 서버 경유) ----------
+    def login_url(self, port, nonce):
+        query = urllib.parse.urlencode({"port": port, "nonce": nonce})
+        return f"{self.auth_server}/login?{query}"
 
     def refresh(self):
         with self._lock:
             if not self.tokens:
                 raise ChzzkAuthError("로그인이 필요합니다.")
-            content = self._token_request(
-                {
-                    "grantType": "refresh_token",
-                    "refreshToken": self.tokens["refreshToken"],
-                    "clientId": self.client_id,
-                    "clientSecret": self.client_secret,
-                }
-            )
+            try:
+                r = requests.post(
+                    f"{self.auth_server}/refresh",
+                    json={"refreshToken": self.tokens["refreshToken"]},
+                    timeout=15,
+                )
+            except requests.RequestException as e:
+                raise RuntimeError(f"인증 서버에 연결할 수 없습니다: {e}")
+            data = r.json() if r.content else {}
+            if r.status_code == 401:
+                # Refresh Token 만료(30일) 또는 권한 해제 → 다시 로그인
+                self.logout()
+                raise ChzzkAuthError(f"로그인이 만료되었습니다: {data.get('error')}")
+            if r.status_code != 200 or not data.get("content"):
+                raise RuntimeError(f"토큰 갱신 실패 ({r.status_code}): {data}")
+            c = data["content"]
             # Refresh Token은 일회용이므로 매번 새로 저장합니다.
-            self._save_tokens(content)
+            self.set_tokens(c["accessToken"], c["refreshToken"], c.get("expiresIn"))
 
     def ensure_fresh(self):
         if self.tokens and time.time() >= self.tokens["expiresAt"]:
             self.refresh()
-
-    def _token_request(self, body):
-        r = requests.post(f"{API_BASE}/auth/v1/token", json=body, timeout=10)
-        data = r.json() if r.content else {}
-        if r.status_code != 200 or not data.get("content"):
-            raise ChzzkAuthError(f"토큰 발급 실패 ({r.status_code}): {data}")
-        return data["content"]
 
     # ---------- API 호출 ----------
     def _request(self, method, path, retry=True, **kwargs):
