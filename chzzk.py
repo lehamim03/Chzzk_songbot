@@ -96,6 +96,10 @@ class ChzzkApi:
             raise RuntimeError(f"{method} {path} 실패 ({r.status_code}): {data}")
         return data.get("content")
 
+    def me(self):
+        """로그인한 계정 정보 {channelId, channelName}. Scope '유저 정보 조회' 필요."""
+        return self._request("GET", "/open/v1/users/me")
+
     def session_url(self):
         return self._request("GET", "/open/v1/sessions/auth")["url"]
 

@@ -2,6 +2,7 @@
 
 python main.py 로 실행한 뒤 OBS 브라우저 소스에 http://localhost:8080/player 를 추가하세요.
 """
+import html
 import json
 import logging
 import os
@@ -71,10 +72,27 @@ AUTH_PAGE = """<!doctype html><meta charset="utf-8"><title>치지직 로그인</
 def index():
     if not api.logged_in:
         return redirect("/login")
+    account = html.escape(bot.account_name) if bot.account_name else "확인 중… (잠시 후 새로고침)"
     return (
-        "<meta charset='utf-8'><h2>치지직 신청곡 봇 실행 중</h2>"
+        "<meta charset='utf-8'><body style=\"font-family:'Malgun Gothic',sans-serif;padding:40px\">"
+        "<h2>치지직 신청곡 봇 실행 중</h2>"
+        f"<p>로그인 계정: <b>{account}</b><br>"
+        "<small>이 채널의 채팅을 읽고, 이 계정 이름으로 안내 채팅을 보냅니다.</small></p>"
         f"<p>OBS 브라우저 소스 주소: <code>http://localhost:{PORT}/player</code></p>"
         "<p><a href='/player'>플레이어 열기</a> · <a href='/api/state'>대기열 보기(JSON)</a></p>"
+        "<p><a href='/switch'>다른 계정으로 로그인</a></p>"
+    )
+
+
+@app.route("/switch")
+def switch():
+    return (
+        "<meta charset='utf-8'><body style=\"font-family:'Malgun Gothic',sans-serif;padding:40px\">"
+        "<h2>다른 계정으로 로그인</h2>"
+        "<p>브라우저에 다른 네이버 계정이 로그인돼 있으면 그 계정으로 자동 연결됩니다.</p>"
+        "<ol><li><a href='https://nid.naver.com/nidlogin.logout' target='_blank'>네이버 로그아웃</a> (새 탭에서 열림)</li>"
+        "<li>아래 버튼을 눌러 <b>스트리머 계정</b>으로 로그인</li></ol>"
+        "<p><a href='/login'><button>치지직 로그인</button></a></p>"
     )
 
 
@@ -102,7 +120,7 @@ def auth_complete():
         return jsonify(ok=False, error="토큰이 없습니다.")
     api.set_tokens(body["accessToken"], body["refreshToken"], body.get("expiresIn"))
     log.info("치지직 로그인 완료")
-    bot.start()
+    bot.restart()
     return jsonify(ok=True)
 
 

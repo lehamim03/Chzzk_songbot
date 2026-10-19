@@ -32,6 +32,8 @@ class SongBot:
         self.port = int(config.get("port", 8080))
         self._pool = ThreadPoolExecutor(max_workers=4)
         self._thread = None
+        self._sio = None
+        self.account_name = None  # 로그인한 치지직 계정 이름
 
     # ---------- 연결 ----------
     def start(self):
@@ -39,6 +41,15 @@ class SongBot:
             return
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
+
+    def restart(self):
+        """다른 계정으로 다시 로그인했을 때: 현재 채팅 연결을 끊고 새 토큰으로 다시 연결."""
+        self.account_name = None
+        if self._thread and self._thread.is_alive():
+            if self._sio:
+                self._sio.disconnect()  # _run 루프가 새 토큰으로 다시 연결합니다
+        else:
+            self.start()
 
     def _run(self):
         while True:
@@ -48,6 +59,7 @@ class SongBot:
                 sio.on("SYSTEM", self._on_system)
                 sio.on("CHAT", self._on_chat)
                 sio.on("disconnect", lambda: log.warning("채팅 세션 연결이 끊겼습니다."))
+                self._sio = sio
                 sio.connect(url, transports=["websocket"])
                 sio.wait()
             except ChzzkAuthError as e:
@@ -76,6 +88,12 @@ class SongBot:
                 log.info("채팅 구독 완료! 이제 !신청곡 을 받을 수 있어요.")
             except Exception:
                 log.exception("채팅 구독 실패")
+                return
+            try:
+                self.account_name = self.api.me().get("channelName")
+                log.info("로그인 계정: %s (이 채널의 채팅을 읽고, 이 계정 이름으로 채팅을 보냅니다)", self.account_name)
+            except Exception:
+                log.info("로그인 계정 이름을 확인하려면 치지직 개발자 센터에서 '유저 정보 조회' 권한을 켜 주세요.")
         elif data.get("type") != "subscribed":
             log.info("SYSTEM: %s", data)
 

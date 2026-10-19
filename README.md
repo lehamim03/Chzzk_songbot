@@ -7,7 +7,8 @@
 2. 이 저장소를 받아서 (`Code` → `Download ZIP` → 압축 풀기) **`run.bat` 더블클릭**
    - 처음 실행 때 필요한 프로그램을 자동으로 설치합니다 (1~2분)
 3. 브라우저가 열리면 **스트리머 본인 치지직 계정으로 로그인** → 권한 동의
-   - 봇은 로그인한 계정의 채널 채팅을 읽습니다.
+   - 봇은 **로그인한 계정의 채널 채팅을 읽고, 그 계정 이름으로 안내 채팅을 보냅니다.**
+   - 다른 계정으로 로그인됐다면 `http://localhost:8080/switch` 에서 네이버 로그아웃 후 다시 로그인하세요.
    - 로그인 정보는 `tokens.json` 에 저장되어 다음부터는 자동으로 로그인됩니다.
 
 치지직 개발자 센터 등록은 필요 없습니다. (배포자의 인증 서버를 통해 로그인)
@@ -86,7 +87,7 @@
    배포가 끝나면 `https://chzzk-songbot-auth.<내 서브도메인>.workers.dev` 주소가 나옵니다.
 3. [치지직 개발자 센터](https://developers.chzzk.naver.com) 앱 설정
    - **로그인 리디렉션 URL**: `https://chzzk-songbot-auth.<내 서브도메인>.workers.dev/callback`
-   - **API Scope**: `채팅 메시지 조회`, `채팅 메시지 쓰기`
+   - **API Scope**: `채팅 메시지 조회`, `채팅 메시지 쓰기`, `유저 정보 조회` (로그인 계정 이름 표시용)
 4. `config.example.json` 의 `auth_server` 를 위 주소로 바꿔서 커밋 → 스트리머들은 받아서 바로 사용
 
 로컬 테스트: `auth-server/.dev.vars` 에 `CHZZK_CLIENT_ID=...`, `CHZZK_CLIENT_SECRET=...` 를 적고 `npx wrangler dev` (이 파일은 커밋되지 않습니다).
