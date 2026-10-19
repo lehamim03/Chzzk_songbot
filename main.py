@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import secrets
+import socket
 import sys
 import webbrowser
 
@@ -30,12 +31,17 @@ log = logging.getLogger("main")
 
 if not os.path.exists("config.json"):
     sys.exit("config.json 이 없습니다. config.example.json 을 복사해서 config.json 을 만들어 주세요.")
-with open("config.json", encoding="utf-8") as f:
-    config = json.load(f)
+try:
+    with open("config.json", encoding="utf-8-sig") as f:  # 메모장이 붙이는 BOM 허용
+        config = json.load(f)
+    PORT = int(config.get("port", 8080))
+except (ValueError, TypeError) as e:
+    sys.exit(
+        f"config.json 형식이 잘못됐습니다: {e}\n"
+        "따옴표/쉼표를 확인하거나, config.json 을 지우고 다시 실행하면 기본값으로 새로 만들어집니다."
+    )
 if not str(config.get("auth_server", "")).startswith("https://"):
     sys.exit("config.json 의 auth_server 에 인증 서버 주소(https://...)를 넣어 주세요.")
-
-PORT = int(config.get("port", 8080))
 
 api = ChzzkApi(config["auth_server"], token_path="tokens.json")
 queue = SongQueue(
@@ -154,7 +160,21 @@ def skip():
     return jsonify(queue.state())
 
 
+def _port_in_use(port):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        try:
+            s.bind(("127.0.0.1", port))
+            return False
+        except OSError:
+            return True
+
+
 if __name__ == "__main__":
+    if _port_in_use(PORT):
+        sys.exit(
+            f"포트 {PORT} 를 다른 프로그램이 쓰고 있습니다. (봇이 이미 켜져 있는지 확인하세요)\n"
+            "config.json 의 \"port\" 를 다른 번호(예: 8090)로 바꾼 뒤 다시 실행하세요."
+        )
     if api.logged_in:
         bot.start()
     else:
