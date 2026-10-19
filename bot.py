@@ -3,6 +3,7 @@ import json
 import logging
 import threading
 import time
+from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 
 import socketio
@@ -35,6 +36,8 @@ class SongBot:
         self._sio = None
         self.account_name = None  # 로그인한 치지직 계정 이름
         self.channel_id = None  # 로그인한 계정의 채널 ID
+        self._sent = deque(maxlen=20)  # 최근에 보낸 채팅 (되돌아온 채팅 식별용)
+        self._sender_logged = False
 
     # ---------- 연결 ----------
     def start(self):
@@ -47,6 +50,7 @@ class SongBot:
         """다른 계정으로 다시 로그인했을 때: 현재 채팅 연결을 끊고 새 토큰으로 다시 연결."""
         self.account_name = None
         self.channel_id = None
+        self._sender_logged = False
         if self._thread and self._thread.is_alive():
             if self._sio:
                 self._sio.disconnect()  # _run 루프가 새 토큰으로 다시 연결합니다
@@ -108,6 +112,13 @@ class SongBot:
         content = (data.get("content") or "").strip()
         if content.startswith("!"):
             self._pool.submit(self._handle, data, content)
+        elif content[:30] in self._sent and not self._sender_logged:
+            # 봇이 보낸 채팅이 되돌아온 것: 치지직이 누구 이름으로 표시하는지 확인
+            self._sender_logged = True
+            log.info(
+                "봇 채팅 표시 계정: %s (https://chzzk.naver.com/%s), 봇 연결 채널: https://chzzk.naver.com/%s",
+                (data.get("profile") or {}).get("nickname"), data.get("senderChannelId"), self.channel_id,
+            )
 
     # ---------- 명령어 ----------
     def say(self, message):
@@ -116,6 +127,7 @@ class SongBot:
             return
         try:
             self.api.send_chat(message)
+            self._sent.append(message[:30])
         except Exception:
             log.exception("채팅 전송 실패")
 
