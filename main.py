@@ -78,12 +78,18 @@ AUTH_PAGE = """<!doctype html><meta charset="utf-8"><title>치지직 로그인</
 def index():
     if not api.logged_in:
         return redirect("/login")
-    account = html.escape(bot.account_name) if bot.account_name else "확인 중… (잠시 후 새로고침)"
+    if bot.channel_id:
+        url = f"https://chzzk.naver.com/{html.escape(bot.channel_id)}"
+        name = html.escape(bot.account_name) if bot.account_name else "채널 열어서 확인"
+        account = f"<a href='{url}' target='_blank'>{name}</a> <small>({url})</small>"
+    else:
+        account = "확인 중… (잠시 후 새로고침)"
     return (
         "<meta charset='utf-8'><body style=\"font-family:'Malgun Gothic',sans-serif;padding:40px\">"
         "<h2>치지직 신청곡 봇 실행 중</h2>"
-        f"<p>로그인 계정: <b>{account}</b><br>"
-        "<small>이 채널의 채팅을 읽고, 이 계정 이름으로 안내 채팅을 보냅니다.</small></p>"
+        f"<p>봇 연결 계정: <b>{account}</b><br>"
+        "<small>이 채널의 채팅을 읽고, 이 계정 이름으로 안내 채팅을 보냅니다. "
+        "스트리머 채널이 아니면 아래 '다른 계정으로 로그인'을 하세요.</small></p>"
         f"<p>OBS 브라우저 소스 주소: <code>http://localhost:{PORT}/player</code></p>"
         "<p><a href='/player'>플레이어 열기</a> · <a href='/api/state'>대기열 보기(JSON)</a></p>"
         "<p><a href='/switch'>다른 계정으로 로그인</a></p>"
@@ -95,7 +101,14 @@ def switch():
     return (
         "<meta charset='utf-8'><body style=\"font-family:'Malgun Gothic',sans-serif;padding:40px\">"
         "<h2>다른 계정으로 로그인</h2>"
-        "<p>봇은 <b>이 브라우저에 로그인된 네이버 계정</b>으로 연결됩니다. 순서대로 해 주세요.</p>"
+        "<p>봇은 <b>이 브라우저에 로그인된 네이버 계정</b>으로 자동 연결됩니다.</p>"
+        "<h3>방법 1 (가장 확실): 시크릿 창</h3>"
+        "<ol>"
+        "<li>크롬/엣지에서 <b>Ctrl + Shift + N</b> 으로 시크릿 창 열기</li>"
+        f"<li>시크릿 창 주소창에 <code>http://localhost:{PORT}/login</code> 입력</li>"
+        "<li>네이버 로그인 화면에서 <b>스트리머 계정</b>으로 로그인 → 권한 동의</li>"
+        "</ol>"
+        "<h3>방법 2: 지금 브라우저에서</h3>"
         "<ol>"
         "<li><a href='https://nid.naver.com/nidlogin.logout' target='_blank'>네이버 로그아웃</a> (새 탭)</li>"
         "<li><a href='https://chzzk.naver.com' target='_blank'>치지직</a> 에서 <b>스트리머 계정</b>으로 로그인 (새 탭)<br>"

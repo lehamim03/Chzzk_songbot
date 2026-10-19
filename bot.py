@@ -34,6 +34,7 @@ class SongBot:
         self._thread = None
         self._sio = None
         self.account_name = None  # 로그인한 치지직 계정 이름
+        self.channel_id = None  # 로그인한 계정의 채널 ID
 
     # ---------- 연결 ----------
     def start(self):
@@ -45,6 +46,7 @@ class SongBot:
     def restart(self):
         """다른 계정으로 다시 로그인했을 때: 현재 채팅 연결을 끊고 새 토큰으로 다시 연결."""
         self.account_name = None
+        self.channel_id = None
         if self._thread and self._thread.is_alive():
             if self._sio:
                 self._sio.disconnect()  # _run 루프가 새 토큰으로 다시 연결합니다
@@ -94,7 +96,11 @@ class SongBot:
                 log.info("로그인 계정: %s (이 채널의 채팅을 읽고, 이 계정 이름으로 채팅을 보냅니다)", self.account_name)
             except Exception:
                 log.info("로그인 계정 이름을 확인하려면 치지직 개발자 센터에서 '유저 정보 조회' 권한을 켜 주세요.")
-        elif data.get("type") != "subscribed":
+        elif data.get("type") == "subscribed":
+            # 구독된 채널 = 로그인한(토큰 주인) 계정의 채널 = 봇이 채팅을 보내는 계정
+            self.channel_id = (data.get("data") or {}).get("channelId")
+            log.info("봇 연결 채널: https://chzzk.naver.com/%s  ← 이 채널 주인 이름으로 채팅이 나갑니다", self.channel_id)
+        else:
             log.info("SYSTEM: %s", data)
 
     def _on_chat(self, data):
@@ -121,6 +127,7 @@ class SongBot:
             "name": (data.get("profile") or {}).get("nickname") or "익명",
             "is_manager": data.get("userRoleCode") in MANAGER_ROLES,
         }
+        log.info("명령어: %s  (보낸 사람: %s, 역할: %s)", content, user["name"], data.get("userRoleCode"))
         try:
             if cmd in ("!신청곡", "!노래"):
                 self.cmd_request(user, arg)
