@@ -40,10 +40,19 @@ except (ValueError, TypeError) as e:
         f"config.json 형식이 잘못됐습니다: {e}\n"
         "따옴표/쉼표를 확인하거나, config.json 을 지우고 다시 실행하면 기본값으로 새로 만들어집니다."
     )
-if not str(config.get("auth_server", "")).startswith("https://"):
+CLIENT_ID = str(config.get("client_id") or "").strip()
+CLIENT_SECRET = str(config.get("client_secret") or "").strip()
+if bool(CLIENT_ID) != bool(CLIENT_SECRET):
+    sys.exit("config.json 의 client_id 와 client_secret 을 둘 다 넣거나, 둘 다 비워 두세요.")
+if not CLIENT_ID and not str(config.get("auth_server", "")).startswith("https://"):
     sys.exit("config.json 의 auth_server 에 인증 서버 주소(https://...)를 넣어 주세요.")
 
-api = ChzzkApi(config["auth_server"], token_path="tokens.json")
+api = ChzzkApi(
+    auth_server=config.get("auth_server"),
+    client_id=CLIENT_ID,
+    client_secret=CLIENT_SECRET,
+    token_path="tokens.json",
+)
 queue = SongQueue(
     max_queue=int(config.get("max_queue", 30)),
     per_user_limit=int(config.get("per_user_limit", 2)),
@@ -87,9 +96,15 @@ def index():
     return (
         "<meta charset='utf-8'><body style=\"font-family:'Malgun Gothic',sans-serif;padding:40px\">"
         "<h2>치지직 신청곡 봇 실행 중</h2>"
-        f"<p>봇 연결 계정: <b>{account}</b><br>"
-        "<small>이 채널의 채팅을 읽고, 이 계정 이름으로 안내 채팅을 보냅니다. "
+        f"<p>봇 연결 채널: <b>{account}</b><br>"
+        "<small>이 채널의 채팅을 읽고 안내 채팅을 보냅니다. "
         "스트리머 채널이 아니면 아래 '다른 계정으로 로그인'을 하세요.</small></p>"
+        + (
+            "<p>로그인 방식: <b>직접 등록한 앱</b> — 봇 채팅이 로그인한 계정 이름으로 나갑니다.</p>"
+            if api.direct
+            else "<p>로그인 방식: <b>인증 서버</b> — 봇 채팅이 인증 서버 앱을 등록한 계정 이름으로 나갑니다.</p>"
+        )
+        +
         f"<p>OBS 브라우저 소스 주소: <code>http://localhost:{PORT}/player</code></p>"
         "<p><a href='/player'>플레이어 열기</a> · <a href='/api/state'>대기열 보기(JSON)</a></p>"
         "<p><a href='/switch'>다른 계정으로 로그인</a></p>"
@@ -125,6 +140,25 @@ def login():
     nonce = secrets.token_urlsafe(16)
     _pending_nonces.add(nonce)
     return redirect(api.login_url(PORT, nonce))
+
+
+@app.route("/callback")
+def callback():
+    """직접 방식: 치지직이 로그인 후 돌려보내는 곳 (개발자 센터의 로그인 리디렉션 URL)."""
+    code, state = request.args.get("code"), request.args.get("state")
+    if not api.direct:
+        return "인증 서버 방식에서는 쓰지 않는 주소입니다. <a href='/login'>다시 로그인</a>", 400
+    if not code or state not in _pending_nonces:
+        return "잘못된 로그인 요청입니다. <a href='/login'>다시 시도</a>", 400
+    _pending_nonces.discard(state)
+    try:
+        api.exchange_code(code, state)
+    except Exception as e:
+        log.error("토큰 발급 실패: %s", e)
+        return f"<meta charset='utf-8'>로그인 실패: {html.escape(str(e))}", 500
+    log.info("치지직 로그인 완료")
+    bot.restart()
+    return redirect("/")
 
 
 @app.route("/auth")
@@ -193,6 +227,11 @@ if __name__ == "__main__":
             f"포트 {PORT} 를 다른 프로그램이 쓰고 있습니다. (봇이 이미 켜져 있는지 확인하세요)\n"
             "config.json 의 \"port\" 를 다른 번호(예: 8090)로 바꾼 뒤 다시 실행하세요."
         )
+    if api.direct:
+        log.info("로그인 방식: 직접 등록한 앱 (봇 채팅이 로그인한 계정 이름으로 나갑니다)")
+        log.info("개발자 센터의 로그인 리디렉션 URL: %s", api.redirect_uri(PORT))
+    else:
+        log.info("로그인 방식: 인증 서버 (봇 채팅이 인증 서버 앱 등록자 이름으로 나갑니다)")
     if api.logged_in:
         bot.start()
     else:

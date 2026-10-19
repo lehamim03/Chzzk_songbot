@@ -1,6 +1,10 @@
 """치지직 Open API 클라이언트 (인증 / 세션 / 채팅).
 
-Client Secret 은 인증 서버(auth-server/)에만 있고, 여기서는 토큰만 다룹니다.
+로그인 방식 두 가지:
+- 인증 서버 방식: Client Secret 은 인증 서버(auth-server/)에만 있고, 여기서는 토큰만 다룹니다.
+  봇 채팅은 인증 서버 앱을 등록한 계정 이름으로 표시됩니다.
+- 직접 방식: 스트리머가 직접 등록한 앱의 Client ID/Secret 으로 토큰을 발급합니다.
+  봇 채팅은 스트리머 본인 이름으로 표시됩니다.
 """
 import json
 import os
@@ -11,6 +15,7 @@ import urllib.parse
 import requests
 
 API_BASE = "https://openapi.chzzk.naver.com"
+AUTH_PAGE = "https://chzzk.naver.com/account-interlock"
 
 
 class ChzzkAuthError(Exception):
@@ -18,8 +23,13 @@ class ChzzkAuthError(Exception):
 
 
 class ChzzkApi:
-    def __init__(self, auth_server, token_path="tokens.json"):
-        self.auth_server = auth_server.rstrip("/")
+    def __init__(self, auth_server=None, client_id=None, client_secret=None, token_path="tokens.json"):
+        self.client_id = client_id
+        self.client_secret = client_secret
+        self.direct = bool(client_id and client_secret)
+        self.auth_server = (auth_server or "").rstrip("/")
+        # 토큰이 어느 앱에서 발급됐는지 (방식/앱을 바꾸면 이전 토큰은 쓸 수 없음)
+        self.app_key = f"direct:{client_id}" if self.direct else f"server:{self.auth_server}"
         self.token_path = token_path
         self._lock = threading.Lock()
         self.tokens = self._load_tokens()
@@ -29,10 +39,14 @@ class ChzzkApi:
         if not os.path.exists(self.token_path):
             return None
         with open(self.token_path, encoding="utf-8") as f:
-            return json.load(f)
+            tokens = json.load(f)
+        if tokens.get("app", self.app_key) != self.app_key:
+            return None  # 다른 앱(로그인 방식)으로 받은 토큰 → 다시 로그인
+        return tokens
 
     def set_tokens(self, access_token, refresh_token, expires_in):
         self.tokens = {
+            "app": self.app_key,
             "accessToken": access_token,
             "refreshToken": refresh_token,
             "expiresAt": time.time() + int(expires_in or 86400) - 60,
@@ -49,15 +63,65 @@ class ChzzkApi:
     def logged_in(self):
         return self.tokens is not None
 
-    # ---------- 인증 (인증 서버 경유) ----------
+    # ---------- 인증 ----------
     def login_url(self, port, nonce):
+        if self.direct:
+            query = urllib.parse.urlencode(
+                {"clientId": self.client_id, "redirectUri": self.redirect_uri(port), "state": nonce}
+            )
+            return f"{AUTH_PAGE}?{query}"
         query = urllib.parse.urlencode({"port": port, "nonce": nonce})
         return f"{self.auth_server}/login?{query}"
+
+    @staticmethod
+    def redirect_uri(port):
+        """직접 방식에서 개발자 센터에 등록해야 하는 로그인 리디렉션 URL."""
+        return f"http://localhost:{port}/callback"
+
+    def exchange_code(self, code, state):
+        """직접 방식: 로그인 코드로 토큰 발급."""
+        c = self._direct_token_request(
+            {
+                "grantType": "authorization_code",
+                "clientId": self.client_id,
+                "clientSecret": self.client_secret,
+                "code": code,
+                "state": state,
+            }
+        )
+        self.set_tokens(c["accessToken"], c["refreshToken"], c.get("expiresIn"))
+
+    def _direct_token_request(self, body):
+        r = requests.post(f"{API_BASE}/auth/v1/token", json=body, timeout=10)
+        data = r.json() if r.content else {}
+        if r.status_code == 200 and data.get("content"):
+            return data["content"]
+        msg = data.get("message") or ""
+        if "CLIENT" in msg.upper():
+            raise RuntimeError(f"config.json 의 client_id / client_secret 이 올바르지 않습니다 ({msg})")
+        if r.status_code in (400, 401):
+            raise ChzzkAuthError(f"로그인이 만료되었습니다: {msg}")
+        raise RuntimeError(f"토큰 발급 실패 ({r.status_code}): {data}")
 
     def refresh(self):
         with self._lock:
             if not self.tokens:
                 raise ChzzkAuthError("로그인이 필요합니다.")
+            if self.direct:
+                try:
+                    c = self._direct_token_request(
+                        {
+                            "grantType": "refresh_token",
+                            "refreshToken": self.tokens["refreshToken"],
+                            "clientId": self.client_id,
+                            "clientSecret": self.client_secret,
+                        }
+                    )
+                except ChzzkAuthError:
+                    self.logout()
+                    raise
+                self.set_tokens(c["accessToken"], c["refreshToken"], c.get("expiresIn"))
+                return
             try:
                 r = requests.post(
                     f"{self.auth_server}/refresh",
@@ -68,7 +132,7 @@ class ChzzkApi:
                 raise RuntimeError(f"인증 서버에 연결할 수 없습니다: {e}")
             data = r.json() if r.content else {}
             if r.status_code == 401:
-                # Refresh Token 만료(30일) 또는 권한 해제 → 다시 로그인
+                # Refresh Token 만료(30일) 또는 권한 해제 → 다시 로그인 (인증 서버 경유)
                 self.logout()
                 raise ChzzkAuthError(f"로그인이 만료되었습니다: {data.get('error')}")
             if r.status_code != 200 or not data.get("content"):
