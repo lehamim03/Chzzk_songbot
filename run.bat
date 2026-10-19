@@ -1,20 +1,32 @@
 @echo off
-chcp 65001 > nul
+rem Keep this file ASCII-only with CRLF line endings (cmd.exe misreads UTF-8/LF batch files).
 cd /d "%~dp0"
 
-if not exist .venv\Scripts\python.exe (
-  echo [처음 실행] 필요한 프로그램을 설치합니다. 1~2분 걸려요...
-  python -m venv .venv
-  if errorlevel 1 (
-    echo Python 3.10 이상을 먼저 설치해 주세요: https://www.python.org/downloads/
-    echo 설치할 때 "Add python.exe to PATH" 를 꼭 체크하세요.
-    pause
-    exit /b 1
-  )
-  .venv\Scripts\python -m pip install -q -r requirements.txt
-)
+if exist .venv\Scripts\python.exe goto config
 
+echo [First run] Installing required packages. This takes 1-2 minutes...
+python -m venv .venv
+if errorlevel 1 goto nopython
+.venv\Scripts\python -m pip install -q -r requirements.txt
+if errorlevel 1 goto pipfail
+
+:config
 if not exist config.json copy config.example.json config.json > nul
 
 .venv\Scripts\python main.py
 pause
+exit /b
+
+:nopython
+echo.
+echo Python 3.10 or newer is required: https://www.python.org/downloads/
+echo When installing, check "Add python.exe to PATH".
+pause
+exit /b 1
+
+:pipfail
+echo.
+echo Package installation failed. Check your internet connection and run again.
+rmdir /s /q .venv
+pause
+exit /b 1
