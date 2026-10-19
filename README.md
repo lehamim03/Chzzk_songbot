@@ -35,10 +35,6 @@
    - `봇 연결 채널: https://chzzk.naver.com/...` → 열어서 **스트리머 채널이 맞는지** 확인
    - 로그인 정보는 `tokens.json` 에 저장되어 다음부터는 자동으로 로그인됩니다.
 
-### 다른 계정으로 연결됐을 때
-브라우저에 다른 네이버 계정(예: 봇을 설치해 준 사람)이 로그인돼 있으면 그 계정으로 자동 연결됩니다.
-**시크릿 창(Ctrl+Shift+N)** 에서 `http://localhost:8080/login` 을 열고 스트리머 계정으로 로그인하세요. (자세한 안내: `http://localhost:8080/switch`)
-
 ### 로그인 방식 바꾸기
 - A → B: `config.json` 에 `client_id`, `client_secret` 입력 후 `run.bat` 다시 실행
 - B → A: 두 값을 다시 `""` 로 비우고 `run.bat` 다시 실행
