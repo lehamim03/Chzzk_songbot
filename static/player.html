@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<title>신청곡 플레이어</title>
+<style>
+  html, body { margin: 0; height: 100%; background: transparent; overflow: hidden;
+    font-family: "Pretendard", "Malgun Gothic", sans-serif; }
+  #wrap { position: relative; width: 100vw; height: 100vh; }
+  #player { width: 100%; height: 100%; }
+  body.audio #player { position: absolute; width: 2px; height: 2px; opacity: 0.01; }
+  #info { position: absolute; left: 16px; bottom: 16px; max-width: calc(100% - 32px);
+    padding: 10px 16px; border-radius: 12px; background: rgba(0,0,0,.65); color: #fff; }
+  #info .title { font-size: 22px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #info .sub { font-size: 15px; opacity: .8; margin-top: 2px; }
+  body.audio #info { top: 0; bottom: auto; left: 0; }
+  #info.idle .title { font-weight: 400; opacity: .8; }
+  body.noinfo #info { display: none; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="player"></div>
+  <div id="info" class="idle"><div class="title">신청곡을 기다리는 중…</div><div class="sub">!신청곡 유튜브링크 / 노래제목</div></div>
+</div>
+<script>
+  // 주소 옵션: ?mode=audio (영상 숨기고 제목만), ?info=0 (제목 카드 숨김)
+  // 볼륨은 config.json 의 volume 과 채팅 !볼륨 명령어로 조절합니다.
+  const params = new URLSearchParams(location.search);
+  if (params.get("mode") === "audio") document.body.classList.add("audio");
+  if (params.get("info") === "0") document.body.classList.add("noinfo");
+
+  let player = null, ready = false, loadedSeq = null, volume = 70;
+  const info = document.getElementById("info");
+
+  function fmt(sec) { return sec ? `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}` : ""; }
+
+  function showInfo(state) {
+    const cur = state.current;
+    if (!cur) {
+      info.className = "idle";
+      info.innerHTML = '<div class="title">신청곡을 기다리는 중…</div><div class="sub">!신청곡 유튜브링크 / 노래제목</div>';
+      return;
+    }
+    info.className = "";
+    const t = document.createElement("div"); t.className = "title"; t.textContent = "🎵 " + cur.title;
+    const s = document.createElement("div"); s.className = "sub";
+    s.textContent = `${cur.requester}님 신청` + (cur.duration ? ` · ${fmt(cur.duration)}` : "") +
+                    (state.queue.length ? ` · 대기 ${state.queue.length}곡` : "");
+    info.replaceChildren(t, s);
+  }
+
+  async function post(path, body) {
+    const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+    return r.json();
+  }
+
+  function apply(state) {
+    showInfo(state);
+    if (!ready) return;
+    if (state.volume !== volume) {
+      volume = state.volume;
+      player.setVolume(volume);
+    }
+    if (state.seq === loadedSeq) return;
+    loadedSeq = state.seq;
+    if (state.current) {
+      player.loadVideoById(state.current.video_id);
+      player.setVolume(volume);
+    } else {
+      player.stopVideo();
+    }
+  }
+
+  async function poll() {
+    try { apply(await (await fetch("/api/state")).json()); } catch (e) {}
+    setTimeout(poll, 1500);
+  }
+
+  function onYouTubeIframeAPIReady() {
+    player = new YT.Player("player", {
+      width: "100%", height: "100%",
+      playerVars: { autoplay: 1, controls: 0, rel: 0, playsinline: 1, origin: location.origin },
+      events: {
+        onReady: () => { ready = true; player.setVolume(volume); poll(); },
+        onStateChange: async (e) => {
+          if (e.data === YT.PlayerState.ENDED && loadedSeq !== null) apply(await post("/api/finished", { seq: loadedSeq }));
+        },
+        onError: async () => {
+          if (loadedSeq !== null) apply(await post("/api/finished", { seq: loadedSeq, error: true }));
+        },
+      },
+    });
+  }
+
+  // 일반 브라우저는 클릭 전 소리 자동재생을 막습니다. (OBS 브라우저 소스는 괜찮음)
+  document.addEventListener("click", () => { if (ready && loadedSeq !== null) player.playVideo(); });
+</script>
+<script src="https://www.youtube.com/iframe_api"></script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+flask>=3.0
+requests>=2.31
+yt-dlp>=2025.1.1
+# Chzzk session server only supports the Socket.IO 2.x protocol -> python-socketio 4.x
+python-socketio[client]==4.6.1
+python-engineio==3.14.2
+websocket-client>=1.6
