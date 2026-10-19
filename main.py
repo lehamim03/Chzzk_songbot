@@ -95,10 +95,15 @@ def switch():
     return (
         "<meta charset='utf-8'><body style=\"font-family:'Malgun Gothic',sans-serif;padding:40px\">"
         "<h2>다른 계정으로 로그인</h2>"
-        "<p>브라우저에 다른 네이버 계정이 로그인돼 있으면 그 계정으로 자동 연결됩니다.</p>"
-        "<ol><li><a href='https://nid.naver.com/nidlogin.logout' target='_blank'>네이버 로그아웃</a> (새 탭에서 열림)</li>"
-        "<li>아래 버튼을 눌러 <b>스트리머 계정</b>으로 로그인</li></ol>"
-        "<p><a href='/login'><button>치지직 로그인</button></a></p>"
+        "<p>봇은 <b>이 브라우저에 로그인된 네이버 계정</b>으로 연결됩니다. 순서대로 해 주세요.</p>"
+        "<ol>"
+        "<li><a href='https://nid.naver.com/nidlogin.logout' target='_blank'>네이버 로그아웃</a> (새 탭)</li>"
+        "<li><a href='https://chzzk.naver.com' target='_blank'>치지직</a> 에서 <b>스트리머 계정</b>으로 로그인 (새 탭)<br>"
+        "<small>오른쪽 위 프로필이 스트리머 계정인지 확인하세요.</small></li>"
+        "<li>이 탭으로 돌아와서 아래 버튼 클릭 → 권한 동의</li>"
+        "</ol>"
+        "<p><a href='/login'><button>스트리머 계정으로 봇 연결</button></a></p>"
+        "<p><small>완료되면 봇 첫 화면으로 이동하고, 봇 창에 '치지직 로그인 완료' 가 나옵니다.</small></p>"
     )
 
 
